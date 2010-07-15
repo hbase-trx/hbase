@@ -19,6 +19,13 @@
  */
 package org.apache.hadoop.hbase.master;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -28,17 +35,11 @@ import org.apache.hadoop.hbase.RemoteExceptionHandler;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.ipc.HRegionInterface;
+import org.apache.hadoop.hbase.master.RegionManager.RegionState;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
+import org.apache.hadoop.hbase.regionserver.wal.HLogSplitter;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.master.RegionManager.RegionState;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Instantiated when a server's lease has expired, meaning it has crashed.
@@ -296,7 +297,9 @@ class ProcessServerShutdown extends RegionServerOperation {
           return false;
         }
         try {
-          HLog.splitLog(master.getRootDir(), rsLogDir,
+          HLogSplitter logSplitter = HLogSplitter.createLogSplitter(this.master
+              .getConfiguration());
+          logSplitter.splitLog(master.getRootDir(), rsLogDir,
               this.master.getOldLogDir(), this.master.getFileSystem(),
             this.master.getConfiguration());
         } finally {

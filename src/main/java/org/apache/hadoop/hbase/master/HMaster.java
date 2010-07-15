@@ -62,13 +62,12 @@ import org.apache.hadoop.hbase.RemoteExceptionHandler;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.MetaScanner;
-import org.apache.hadoop.hbase.client.MetaScanner.MetaScannerVisitor;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.ServerConnection;
 import org.apache.hadoop.hbase.client.ServerConnectionManager;
-import org.apache.hadoop.hbase.executor.HBaseEventHandler;
+import org.apache.hadoop.hbase.client.MetaScanner.MetaScannerVisitor;
 import org.apache.hadoop.hbase.executor.HBaseExecutorService;
 import org.apache.hadoop.hbase.executor.HBaseEventHandler.HBaseEventType;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -82,6 +81,7 @@ import org.apache.hadoop.hbase.master.metrics.MasterMetrics;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
+import org.apache.hadoop.hbase.regionserver.wal.HLogSplitter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.hbase.util.InfoServer;
@@ -173,9 +173,9 @@ public class HMaster extends Thread implements HMasterInterface,
   public HMaster(Configuration conf) throws IOException {
     this.conf = conf;
     
-    // Figure out if this is a fresh cluster start. This is done by checking the 
-    // number of RS ephemeral nodes. RS ephemeral nodes are created only after 
-    // the primary master has written the address to ZK. So this has to be done 
+    // Figure out if this is a fresh cluster start. This is done by checking the
+    // number of RS ephemeral nodes. RS ephemeral nodes are created only after
+    // the primary master has written the address to ZK. So this has to be done
     // before we race to write our address to zookeeper.
     zooKeeperWrapper = ZooKeeperWrapper.createInstance(conf, HMaster.class.getName());
     isClusterStartup = (zooKeeperWrapper.scanRSDirectory().size() == 0);
@@ -228,8 +228,8 @@ public class HMaster extends Thread implements HMasterInterface,
     serverManager = new ServerManager(this);
 
     
-    // Start the unassigned watcher - which will create the unassigned region 
-    // in ZK. This is needed before RegionManager() constructor tries to assign 
+    // Start the unassigned watcher - which will create the unassigned region
+    // in ZK. This is needed before RegionManager() constructor tries to assign
     // the root region.
     ZKUnassignedWatcher.start(this.conf, this);
     // start the "close region" executor service
@@ -249,7 +249,7 @@ public class HMaster extends Thread implements HMasterInterface,
   }
   
   /**
-   * Returns true if this master process was responsible for starting the 
+   * Returns true if this master process was responsible for starting the
    * cluster.
    */
   public boolean isClusterStartup() {
@@ -632,7 +632,9 @@ public class HMaster extends Thread implements HMasterInterface,
         Path logDir =
           new Path(this.rootdir, HLog.getHLogDirectoryName(serverName));
         try {
-          HLog.splitLog(this.rootdir, logDir, oldLogDir, this.fs, getConfiguration());
+          HLogSplitter logSplitter = HLogSplitter.createLogSplitter(conf);
+          logSplitter.splitLog(this.rootdir, logDir, oldLogDir, this.fs,
+              getConfiguration());
         } catch (IOException e) {
           LOG.error("Failed splitting " + logDir.toString(), e);
         } finally {
@@ -894,7 +896,7 @@ public class HMaster extends Thread implements HMasterInterface,
         }
     };
 
-    MetaScanner.metaScan(conf, visitor, tableName); 
+    MetaScanner.metaScan(conf, visitor, tableName);
     return result;
   }
   
@@ -911,7 +913,7 @@ public class HMaster extends Thread implements HMasterInterface,
     } else {
       //undeployed
       return new Pair<HRegionInfo, HServerAddress>(info, null);
-    }    
+    }
   }
 
   /**
@@ -1156,8 +1158,8 @@ public class HMaster extends Thread implements HMasterInterface,
    */
   @Override
   public void process(WatchedEvent event) {
-    LOG.debug("Event " + event.getType() + 
-              " with state " + event.getState() +  
+    LOG.debug("Event " + event.getType() +
+              " with state " + event.getState() +
               " with path " + event.getPath());
     // Master should kill itself if its session expired or if its
     // znode was deleted manually (usually for testing purposes)
@@ -1181,7 +1183,7 @@ public class HMaster extends Thread implements HMasterInterface,
           throw new Exception("Another Master is currently active");
         }
 
-        // we are a failed over master, reset the fact that we started the 
+        // we are a failed over master, reset the fact that we started the
         // cluster
         resetClusterStartup();
         // Verify the cluster to see if anything happened while we were away

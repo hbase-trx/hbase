@@ -26,8 +26,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.regionserver.wal.HLog;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.io.SequenceFile;
 
 public class SequenceFileLogReader implements HLog.Reader {
@@ -94,7 +92,15 @@ public class SequenceFileLogReader implements HLog.Reader {
   Configuration conf;
   WALReader reader;
 
-  public SequenceFileLogReader() { }
+   private final Class<? extends HLogKey> keyClass;
+
+  // public SequenceFileLogReader() {
+  // }
+
+   public SequenceFileLogReader(Class<? extends HLogKey> keyClass) {
+    this.keyClass = keyClass;
+  }
+
 
   @Override
   public void init(FileSystem fs, Path path, Configuration conf)
@@ -116,7 +122,17 @@ public class SequenceFileLogReader implements HLog.Reader {
   @Override
   public HLog.Entry next(HLog.Entry reuse) throws IOException {
     if (reuse == null) {
-      HLogKey key = HLog.newKey(conf);
+      // HLogKey key = HLog.newKey(conf);
+
+       HLogKey key;
+      try {
+        key = keyClass.newInstance();
+      } catch (InstantiationException e) {
+        throw new IOException(e);
+      } catch (IllegalAccessException e) {
+        throw new IOException(e);
+      }
+      
       WALEdit val = new WALEdit();
       if (reader.next(key, val)) {
         return new HLog.Entry(key, val);
