@@ -400,35 +400,8 @@ public class MemStore implements HeapSize {
     }
   }
 
-  //
-  // HBASE-880/1249/1304
-  //
 
-  /**
-   * Perform a single-row Get on the  and snapshot, placing results
-   * into the specified KV list.
-   * <p>
-   * This will return true if it is determined that the query is complete
-   * and it is not necessary to check any storefiles after this.
-   * <p>
-   * Otherwise, it will return false and you should continue on.
-   * @param matcher Column matcher
-   * @param result List to add results to
-   * @return true if done with store (early-out), false if not
-   */
-  public boolean get(QueryMatcher matcher, List<KeyValue> result) {
-    this.lock.readLock().lock();
-    try {
-      if(internalGet(this.kvset, matcher, result) || matcher.isDone()) {
-        return true;
-      }
-      matcher.update();
-      return internalGet(this.snapshot, matcher, result) || matcher.isDone();
-    } finally {
-      this.lock.readLock().unlock();
-    }
-  }
-
+  // TODO fix this not to use QueryMatcher!
   /**
    * Gets from either the memstore or the snapshop, and returns a code
    * to let you know which is which.
@@ -653,7 +626,7 @@ public class MemStore implements HeapSize {
   }
 
   public final static long FIXED_OVERHEAD = ClassSize.align(
-      ClassSize.OBJECT + (7 * ClassSize.REFERENCE));
+      ClassSize.OBJECT + (9 * ClassSize.REFERENCE));
 
   public final static long DEEP_OVERHEAD = ClassSize.align(FIXED_OVERHEAD +
       ClassSize.REENTRANT_LOCK + ClassSize.ATOMIC_LONG +
