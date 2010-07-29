@@ -37,6 +37,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -62,13 +66,12 @@ import org.apache.hadoop.hbase.RemoteExceptionHandler;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.MetaScanner;
-import org.apache.hadoop.hbase.client.MetaScanner.MetaScannerVisitor;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.ServerConnection;
 import org.apache.hadoop.hbase.client.ServerConnectionManager;
-import org.apache.hadoop.hbase.executor.HBaseEventHandler;
+import org.apache.hadoop.hbase.client.MetaScanner.MetaScannerVisitor;
 import org.apache.hadoop.hbase.executor.HBaseExecutorService;
 import org.apache.hadoop.hbase.executor.HBaseEventHandler.HBaseEventType;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -181,6 +184,27 @@ public class HMaster extends Thread implements HMasterInterface,
     zooKeeperWrapper = ZooKeeperWrapper.createInstance(conf, HMaster.class.getName());
     isClusterStartup = (zooKeeperWrapper.scanRSDirectory().size() == 0);
     
+    // Get my address and create an rpc server instance.  The rpc-server port
+    // can be ephemeral...ensure we have the correct info
+    HServerAddress a = new HServerAddress(getMyAddress(this.conf));
+    this.rpcServer = HBaseRPC.getServer(this, a.getBindAddress(),
+      a.getPort(), conf.getInt("hbase.regionserver.handler.count", 10),
+      false, conf);
+    this.address = new HServerAddress(this.rpcServer.getListenerAddress());
+
+    this.numRetries =  conf.getInt("hbase.client.retries.number", 2);
+    this.threadWakeFrequency = conf.getInt(HConstants.THREAD_WAKE_FREQUENCY,
+        10 * 1000);
+
+    this.sleeper = new Sleeper(this.threadWakeFrequency, this.closed);
+    this.connection = ServerConnectionManager.getConnection(conf);
+
+    // hack! Maps DFSClient => Master for logs.  HDFS made this 
+    // config param for task trackers, but we can piggyback off of it.
+    if (this.conf.get("mapred.task.id") == null) {
+      this.conf.set("mapred.task.id", "hb_m_" + this.address.toString());
+    }
+
     // Set filesystem to be that of this.rootdir else we get complaints about
     // mismatched filesystems if hbase.rootdir is hdfs and fs.defaultFS is
     // default localfs.  Presumption is that rootdir is fully-qualified before
@@ -198,21 +222,6 @@ public class HMaster extends Thread implements HMasterInterface,
     if(!this.fs.exists(this.oldLogDir)) {
       this.fs.mkdirs(this.oldLogDir);
     }
-
-    // Get my address and create an rpc server instance.  The rpc-server port
-    // can be ephemeral...ensure we have the correct info
-    HServerAddress a = new HServerAddress(getMyAddress(this.conf));
-    this.rpcServer = HBaseRPC.getServer(this, a.getBindAddress(),
-      a.getPort(), conf.getInt("hbase.regionserver.handler.count", 10),
-      false, conf);
-    this.address = new HServerAddress(this.rpcServer.getListenerAddress());
-
-    this.numRetries =  conf.getInt("hbase.client.retries.number", 2);
-    this.threadWakeFrequency = conf.getInt(HConstants.THREAD_WAKE_FREQUENCY,
-        10 * 1000);
-
-    this.sleeper = new Sleeper(this.threadWakeFrequency, this.closed);
-    this.connection = ServerConnectionManager.getConnection(conf);
 
     // Get our zookeeper wrapper and then try to write our address to zookeeper.
     // We'll succeed if we are only  master or if we win the race when many
@@ -1202,6 +1211,7 @@ public class HMaster extends Thread implements HMasterInterface,
     System.err.println(" stop   Start cluster shutdown; Master signals RegionServer shutdown");
     System.err.println(" where [opts] are:");
     System.err.println("   --minServers=<servers>    Minimum RegionServers needed to host user tables.");
+    System.err.println("   -D opt=<value>            Override HBase configuration settings.");
     System.exit(0);
   }
 
@@ -1253,20 +1263,34 @@ public class HMaster extends Thread implements HMasterInterface,
 
   protected static void doMain(String [] args,
       Class<? extends HMaster> masterClass) {
-    if (args.length < 1) {
-      printUsageAndExit();
-    }
     Configuration conf = HBaseConfiguration.create();
-    // Process command-line args.
-    for (String cmd: args) {
 
-      if (cmd.startsWith("--minServers=")) {
+    Options opt = new Options();
+    opt.addOption("minServers", true, "Minimum RegionServers needed to host user tables");
+    opt.addOption("D", true, "Override HBase Configuration Settings");
+    try {
+      CommandLine cmd = new GnuParser().parse(opt, args);
+
+      if (cmd.hasOption("minServers")) {
+        String val = cmd.getOptionValue("minServers");
         conf.setInt("hbase.regions.server.count.min",
-          Integer.valueOf(cmd.substring(13)));
-        continue;
+            Integer.valueOf(val));
+        LOG.debug("minServers set to " + val);
       }
 
-      if (cmd.equalsIgnoreCase("start")) {
+      if (cmd.hasOption("D")) {
+        for (String confOpt : cmd.getOptionValues("D")) {
+          String[] kv = confOpt.split("=", 2);
+          if (kv.length == 2) {
+            conf.set(kv[0], kv[1]);
+            LOG.debug("-D configuration override: " + kv[0] + "=" + kv[1]);
+          } else {
+            throw new ParseException("-D option format invalid: " + confOpt);
+          }
+        }
+      }
+
+      if (cmd.getArgList().contains("start")) {
         try {
           // Print out vm stats before starting up.
           RuntimeMXBean runtime = ManagementFactory.getRuntimeMXBean();
@@ -1315,10 +1339,7 @@ public class HMaster extends Thread implements HMasterInterface,
           LOG.error("Failed to start master", t);
           System.exit(-1);
         }
-        break;
-      }
-
-      if (cmd.equalsIgnoreCase("stop")) {
+      } else if (cmd.getArgList().contains("stop")) {
         HBaseAdmin adm = null;
         try {
           adm = new HBaseAdmin(conf);
@@ -1332,10 +1353,12 @@ public class HMaster extends Thread implements HMasterInterface,
           LOG.error("Failed to stop master", t);
           System.exit(-1);
         }
-        break;
+      } else {
+        throw new ParseException("Unknown argument(s): " +
+            org.apache.commons.lang.StringUtils.join(cmd.getArgs(), " "));
       }
-
-      // Print out usage if we get to here.
+    } catch (ParseException e) {
+      LOG.error("Could not parse: ", e);
       printUsageAndExit();
     }
   }

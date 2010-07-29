@@ -25,9 +25,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.NavigableSet;
-import java.util.Set;
 import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -42,9 +40,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValue.KeyComparator;
 import org.apache.hadoop.hbase.RemoteExceptionHandler;
-import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.HeapSize;
 import org.apache.hadoop.hbase.io.hfile.Compression;
@@ -52,6 +48,7 @@ import org.apache.hadoop.hbase.io.hfile.HFile;
 import org.apache.hadoop.hbase.io.hfile.HFileScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.ClassSize;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.hadoop.util.StringUtils;
 
 import com.google.common.collect.ImmutableList;
@@ -668,7 +665,7 @@ public class Store implements HeapSize {
       LOG.info("Started compaction of " + filesToCompact.size() + " file(s) in " +
           this.storeNameStr + " of " + this.region.getRegionInfo().getRegionNameAsString() +
         (references? ", hasReferences=true,": " ") + " into " +
-          region.getTmpDir() + ", seqid=" + maxId);
+          region.getTmpDir() + ", sequenceid=" + maxId);
       StoreFile.Writer writer = compact(filesToCompact, majorcompaction, maxId);
       // Move the compaction into place.
       StoreFile sf = completeCompaction(filesToCompact, writer);
@@ -1298,49 +1295,18 @@ public class Store implements HeapSize {
   public long updateColumnValue(byte [] row, byte [] f,
                                 byte [] qualifier, long newValue)
       throws IOException {
-    List<KeyValue> result = new ArrayList<KeyValue>();
-    KeyComparator keyComparator = this.comparator.getRawComparator();
 
-    KeyValue kv = null;
-    // Setting up the QueryMatcher
-    Get get = new Get(row);
-    NavigableSet<byte[]> qualifiers =
-      new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
-    qualifiers.add(qualifier);
-    QueryMatcher matcher = new QueryMatcher(get, f, qualifiers, this.ttl,
-      keyComparator, 1);
-
-    // lock memstore snapshot for this critical section:
     this.lock.readLock().lock();
-    memstore.readLockLock();
     try {
-      int memstoreCode = this.memstore.getWithCode(matcher, result);
+      long now = EnvironmentEdgeManager.currentTimeMillis();
 
-      if (memstoreCode != 0) {
-        // was in memstore (or snapshot)
-        kv = result.get(0).clone();
-        byte [] buffer = kv.getBuffer();
-        int valueOffset = kv.getValueOffset();
-        Bytes.putBytes(buffer, valueOffset, Bytes.toBytes(newValue), 0,
-            Bytes.SIZEOF_LONG);
-        if (memstoreCode == 2) {
-          // from snapshot, assign new TS
-          long currTs = System.currentTimeMillis();
-          if (currTs == kv.getTimestamp()) {
-            currTs++; // unlikely but catastrophic
-          }
-          Bytes.putBytes(buffer, kv.getTimestampOffset(),
-              Bytes.toBytes(currTs), 0, Bytes.SIZEOF_LONG);
-        }
-      } else {
-        kv = new KeyValue(row, f, qualifier,
-            System.currentTimeMillis(),
-            Bytes.toBytes(newValue));
-      }
-      return add(kv);
-      // end lock
+      return this.memstore.updateColumnValue(row,
+          f,
+          qualifier,
+          newValue,
+          now);
+
     } finally {
-      memstore.readLockUnlock();
       this.lock.readLock().unlock();
     }
   }

@@ -336,6 +336,36 @@ public class HLogSplitter {
     }
   }
 
+  /*
+   * Path to a file under RECOVERED_EDITS_DIR directory of the region found in
+   * <code>logEntry</code> named for the sequenceid in the passed
+   * <code>logEntry</code>: e.g. /hbase/some_table/2323432434/recovered.edits/2332.
+   * This method also ensures existence of RECOVERED_EDITS_DIR under the region
+   * creating it if necessary.
+   * @param fs
+   * @param logEntry
+   * @param rootDir HBase root dir.
+   * @return Path to file into which to dump split log edits.
+   * @throws IOException
+   */
+  private static Path getRegionSplitEditsPath(final FileSystem fs,
+      final Entry logEntry, final Path rootDir) throws IOException {
+    Path tableDir = HTableDescriptor.getTableDir(rootDir, logEntry.getKey()
+        .getTablename());
+    Path regiondir = HRegion.getRegionDir(tableDir, HRegionInfo
+        .encodeRegionName(logEntry.getKey().getRegionName()));
+    Path dir = getRegionDirRecoveredEditsDir(regiondir);
+    if (!fs.exists(dir)) {
+      if (!fs.mkdirs(dir))
+        LOG.warn("mkdir failed on " + dir);
+    }
+    return new Path(dir, formatRecoveredEditsFileName(logEntry.getKey()
+        .getLogSeqNum()));
+  }
+
+  static String formatRecoveredEditsFileName(final long seqid) {
+    return String.format("%019d", seqid);
+  }
   
   /*
    * Parse a single hlog and put the edits in @splitLogsMap

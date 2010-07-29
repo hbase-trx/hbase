@@ -1,4 +1,4 @@
-/*
+/**
  * Copyright 2010 The Apache Software Foundation
  *
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -17,20 +17,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hbase.regionserver.wal;
+package org.apache.hadoop.hbase.replication.regionserver;
 
-import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.metrics.MetricsMBeanBase;
+import org.apache.hadoop.metrics.util.MBeanUtil;
+import org.apache.hadoop.metrics.util.MetricsRegistry;
+
+import javax.management.ObjectName;
 
 /**
- * Interface that defines all actions that can be listened to coming
- * from the HLog. The calls are done in sync with what happens over in the
- * HLog so make sure your implementation is fast.
+ * Exports metrics recorded by {@link ReplicationSourceMetrics} as an MBean
+ * for JMX monitoring.
  */
-public interface LogActionsListener {
+public class ReplicationStatistics extends MetricsMBeanBase {
+
+  private final ObjectName mbeanName;
 
   /**
-   * Notify the listener that a new file is available
-   * @param newFile the path to the new hlog
+   * Constructor to register the MBean
+   * @param registry which rehistry to use
+   * @param name name to get to this bean
    */
-  public void logRolled(Path newFile);
+  public ReplicationStatistics(MetricsRegistry registry, String name) {
+    super(registry, name);
+    mbeanName = MBeanUtil.registerMBean("Replication", name, this);
+  }
 }

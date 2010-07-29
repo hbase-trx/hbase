@@ -387,34 +387,36 @@ public class TestHLogSplit {
       // hadoop 0.21 throws FNFE whereas hadoop 0.20 returns null
     }
   }
+/* DISABLED for now.  TODO: HBASE-2645 
+  @Test
+  public void testLogCannotBeWrittenOnceParsed() throws IOException {
+    AtomicLong counter = new AtomicLong(0);
+    AtomicBoolean stop = new AtomicBoolean(false);
+    generateHLogs(9);
+    fs.initialize(fs.getUri(), conf);
 
-  /*
-   * DISABLED for now. TODO: HBASE-2645
-   * 
-   * @Test public void testLogCannotBeWrittenOnceParsed() throws IOException {
-   * AtomicLong counter = new AtomicLong(0); AtomicBoolean stop = new
-   * AtomicBoolean(false); generateHLogs(9); fs.initialize(fs.getUri(), conf);
-   * 
-   * Thread zombie = new ZombieLastLogWriterRegionServer(writer[9], counter,
-   * stop);
-   * 
-   * 
-   * 
-   * try { zombie.start();
-   * 
-   * logSplitter.splitLog(hbaseDir, hlogDir, oldLogDir, fs, conf);
-   * 
-   * Path logfile = getLogForRegion(hbaseDir, TABLE_NAME, "juliet");
-   * 
-   * // It's possible that the writer got an error while appending and didn't
-   * count it // however the entry will in fact be written to file and split
-   * with the rest long numberOfEditsInRegion = countHLog(logfile, fs, conf);
-   * assertTrue("The log file could have at most 1 extra log entry, but " +
-   * "can't have less. Zombie could write "+counter.get()
-   * +" and logfile had only"+ numberOfEditsInRegion+" " + logfile,
-   * counter.get() == numberOfEditsInRegion || counter.get() + 1 ==
-   * numberOfEditsInRegion); } finally { stop.set(true); } }
-   */
+    Thread zombie = new ZombieLastLogWriterRegionServer(writer[9], counter, stop);
+
+
+
+    try {
+      zombie.start();
+
+      HLog.splitLog(hbaseDir, hlogDir, oldLogDir, fs, conf);
+
+      Path logfile = getLogForRegion(hbaseDir, TABLE_NAME, "juliet");
+
+      // It's possible that the writer got an error while appending and didn't count it
+      // however the entry will in fact be written to file and split with the rest
+      long numberOfEditsInRegion = countHLog(logfile, fs, conf);
+      assertTrue("The log file could have at most 1 extra log entry, but " +
+              "can't have less. Zombie could write "+counter.get() +" and logfile had only"+ numberOfEditsInRegion+" "  + logfile, counter.get() == numberOfEditsInRegion ||
+                      counter.get() + 1 == numberOfEditsInRegion);
+    } finally {
+      stop.set(true);
+    }
+  }
+*/
 
   @Test
   public void testSplitWillNotTouchLogsIfNewHLogGetsCreatedAfterSplitStarted()
@@ -441,7 +443,7 @@ public class TestHLogSplit {
   }
 
 
-  @Ignore
+
   @Test(expected = IOException.class)
   public void testSplitWillFailIfWritingToRegionFails() throws Exception {
     //leave 5th log open so we could append the "trap"
@@ -493,9 +495,6 @@ public class TestHLogSplit {
 
     assertEquals(0, compareHLogSplitDirs(firstSplitPath, splitPath));
   }
-
-
-
 
   /**
    * This thread will keep writing to the file after the split process has started
@@ -628,11 +627,14 @@ public class TestHLogSplit {
     }
   }
 
-  private Path getLogForRegion(Path rootdir, byte[] table, String region) {
-    return new Path(HRegion.getRegionDir(HTableDescriptor
-            .getTableDir(rootdir, table),
-            HRegionInfo.encodeRegionName(region.getBytes())),
-            HLogSplitter.RECOVERED_EDITS);
+  private Path getLogForRegion(Path rootdir, byte[] table, String region)
+  throws IOException {
+    Path tdir = HTableDescriptor.getTableDir(rootdir, table);
+    Path editsdir = HLog.getRegionDirRecoveredEditsDir(HRegion.getRegionDir(tdir,
+      HRegionInfo.encodeRegionName(region.getBytes())));
+    FileStatus [] files = this.fs.listStatus(editsdir);
+    assertEquals(1, files.length);
+    return files[0].getPath();
   }
 
   private void corruptHLog(Path path, Corruptions corruption, boolean close,
@@ -740,9 +742,15 @@ public class TestHLogSplit {
     FileStatus[] f2 = fs.listStatus(p2);
 
     for (int i=0; i<f1.length; i++) {
-      if (!logsAreEqual(
-          new Path(f1[i].getPath(), HLogSplitter.RECOVERED_EDITS), new Path(
-              f2[i].getPath(), HLogSplitter.RECOVERED_EDITS))) {
+      // Regions now have a directory named RECOVERED_EDITS_DIR and in here
+      // are split edit files.  In below presume only 1.
+      Path rd1 = HLog.getRegionDirRecoveredEditsDir(f1[i].getPath());
+      FileStatus [] rd1fs = fs.listStatus(rd1);
+      assertEquals(1, rd1fs.length);
+      Path rd2 = HLog.getRegionDirRecoveredEditsDir(f2[i].getPath());
+      FileStatus [] rd2fs = fs.listStatus(rd2);
+      assertEquals(1, rd2fs.length);
+      if (!logsAreEqual(rd1fs[0].getPath(), rd2fs[0].getPath())) {
         return -1;
       }
     }
@@ -764,6 +772,4 @@ public class TestHLogSplit {
     }
     return true;
   }
-
-
 }

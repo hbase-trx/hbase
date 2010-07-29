@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -41,6 +42,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.logging.Log;
@@ -49,6 +51,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.fs.Syncable;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
@@ -102,9 +105,17 @@ import org.apache.hadoop.io.Writable;
  */
 public class HLog implements Syncable {
   static final Log LOG = LogFactory.getLog(HLog.class);
-  private static final String HLOG_DATFILE = "hlog.dat.";
   public static final byte [] METAFAMILY = Bytes.toBytes("METAFAMILY");
   static final byte [] METAROW = Bytes.toBytes("METAROW");
+
+  /*
+   * Name of directory that holds recovered edits written by the wal log
+   * splitting code, one per region
+   */
+  private static final String RECOVERED_EDITS_DIR = "recovered.edits";
+  private static final Pattern EDITFILES_NAME_PATTERN =
+    Pattern.compile("-?[0-9]+");
+  
   private final FileSystem fs;
   private final Path dir;
   private final Configuration conf;
@@ -126,12 +137,6 @@ public class HLog implements Syncable {
   private int initialReplication;    // initial replication factor of SequenceFile.writer
   private Method getNumCurrentReplicas; // refers to DFSOutputStream.getNumCurrentReplicas
   final static Object [] NO_ARGS = new Object []{};
-
-  // /** Name of file that holds recovered edits written by the wal log
-  // splitting
-  // * code, one per region
-  // */
-  // public static final String RECOVERED_EDITS = "recovered.edits";
 
   // used to indirectly tell syncFs to force the sync
   private boolean forceSync = false;
@@ -273,20 +278,20 @@ public class HLog implements Syncable {
 
   /**
    * Create an edit log at the given <code>dir</code> location.
-   * 
+   *
    * You should never have to load an existing log. If there is a log at
    * startup, it should have already been processed and deleted by the time the
    * HLog object is started up.
-   * 
+   *
    * @param fs filesystem handle
    * @param dir path to where hlogs are stored
    * @param oldLogDir path to where hlogs are archived
    * @param conf configuration to use
    * @param listener listerner used to request log rolls
    * @param actionListener optional listener for hlog actions like archiving
-   * @param prefix should always be hostname and port in distributed env and it
-   *        will be URL encoded before being used. If prefix is null, "hlog"
-   *        will be used
+   * @param prefix should always be hostname and port in distributed env and
+   *        it will be URL encoded before being used.
+   *        If prefix is null, "hlog" will be used
    * @throws IOException
    */
   public HLog(final FileSystem fs, final Path dir, final Path oldLogDir,
@@ -404,7 +409,7 @@ public class HLog implements Syncable {
         !this.logSeqNum.compareAndSet(id, newvalue); id = this.logSeqNum.get()) {
       // This could spin on occasion but better the occasional spin than locking
       // every increment of sequence number.
-      LOG.debug("Change sequence number from " + logSeqNum + " to " + newvalue);
+      LOG.debug("Changed sequenceid from " + logSeqNum + " to " + newvalue);
     }
   }
 
@@ -483,7 +488,7 @@ public class HLog implements Syncable {
         // Can we delete any of the old log files?
         if (this.outputfiles.size() > 0) {
           if (this.lastSeqWritten.size() <= 0) {
-            LOG.debug("Last sequence written is empty. Deleting all old hlogs");
+            LOG.debug("Last sequenceid written is empty. Deleting all old hlogs");
             // If so, then no new writes have come in since all regions were
             // flushed (and removed from the lastSeqWritten map). Means can
             // remove all but currently open log file.
@@ -585,7 +590,7 @@ public class HLog implements Syncable {
         byte [] oldestRegion = getOldestRegion(oldestOutstandingSeqNum);
         LOG.debug("Found " + logsToRemove + " hlogs to remove " +
           " out of total " + this.outputfiles.size() + "; " +
-          "oldest outstanding seqnum is " + oldestOutstandingSeqNum +
+          "oldest outstanding sequenceid is " + oldestOutstandingSeqNum +
           " from region " + Bytes.toString(oldestRegion));
       }
       for (Long seq : sequenceNumbers) {
@@ -685,14 +690,9 @@ public class HLog implements Syncable {
   private void archiveLogFile(final Path p, final Long seqno) throws IOException {
     Path newPath = getHLogArchivePath(this.oldLogDir, p);
     LOG.info("moving old hlog file " + FSUtils.getPath(p) +
-      " whose highest sequence/edit id is " + seqno + " to " +
+      " whose highest sequenceid is " + seqno + " to " +
       FSUtils.getPath(newPath));
     this.fs.rename(p, newPath);
-    if (!this.actionListeners.isEmpty()) {
-      for (LogActionsListener list : this.actionListeners) {
-        list.logArchived(p, newPath);
-      }
-    }
   }
 
   /**
@@ -775,7 +775,6 @@ public class HLog implements Syncable {
    * @return New log key.
    */
   protected HLogKey makeKey(byte[] regionName, byte[] tableName, long seqnum, long now) {
-    
     return new HLogKey(regionName, tableName, seqnum, now);
   }
 
@@ -1703,6 +1702,102 @@ public class HLog implements Syncable {
   // HRegionInfo.encodeRegionName(logEntry.getKey().getRegionName()));
   // return new Path(regionDir, RECOVERED_EDITS);
   // }
+
+  
+  /*
+   * Path to a file under RECOVERED_EDITS_DIR directory of the region found in
+   * <code>logEntry</code> named for the sequenceid in the passed
+   * <code>logEntry</code>: e.g. /hbase/some_table/2323432434/recovered.edits/2332.
+   * This method also ensures existence of RECOVERED_EDITS_DIR under the region
+   * creating it if necessary.
+   * @param fs
+   * @param logEntry
+   * @param rootDir HBase root dir.
+   * @return Path to file into which to dump split log edits.
+   * @throws IOException
+   */
+  private static Path getRegionSplitEditsPath(final FileSystem fs,
+      final Entry logEntry, final Path rootDir)
+  throws IOException {
+    Path tableDir = HTableDescriptor.getTableDir(rootDir,
+      logEntry.getKey().getTablename());
+    Path regiondir = HRegion.getRegionDir(tableDir,
+      HRegionInfo.encodeRegionName(logEntry.getKey().getRegionName()));
+    Path dir = getRegionDirRecoveredEditsDir(regiondir);
+    if (!fs.exists(dir)) {
+      if (!fs.mkdirs(dir)) LOG.warn("mkdir failed on " + dir);
+    }
+    return new Path(dir,
+      formatRecoveredEditsFileName(logEntry.getKey().getLogSeqNum()));
+   }
+
+  static String formatRecoveredEditsFileName(final long seqid) {
+    return String.format("%019d", seqid);
+  }
+
+
+  /**
+   * Returns sorted set of edit files made by wal-log splitter.
+   * @param fs
+   * @param regiondir
+   * @return Files in passed <code>regiondir</code> as a sorted set.
+   * @throws IOException
+   */
+  public static NavigableSet<Path> getSplitEditFilesSorted(final FileSystem fs,
+      final Path regiondir)
+  throws IOException {
+    Path editsdir = getRegionDirRecoveredEditsDir(regiondir);
+    FileStatus [] files = fs.listStatus(editsdir, new PathFilter () {
+      @Override
+      public boolean accept(Path p) {
+        boolean result = false;
+        try {
+          // Return files and only files that match the editfile names pattern.
+          // There can be other files in this directory other than edit files.
+          // In particular, on error, we'll move aside the bad edit file giving
+          // it a timestamp suffix.  See moveAsideBadEditsFile.
+          Matcher m = EDITFILES_NAME_PATTERN.matcher(p.getName());
+          result = fs.isFile(p) && m.matches();
+        } catch (IOException e) {
+          LOG.warn("Failed isFile check on " + p);
+        }
+        return result;
+      }
+    });
+    NavigableSet<Path> filesSorted = new TreeSet<Path>();
+    if (files == null) return filesSorted;
+    for (FileStatus status: files) {
+      filesSorted.add(status.getPath());
+    }
+    return filesSorted;
+  }
+
+  /**
+   * Move aside a bad edits file.
+   * @param fs
+   * @param edits Edits file to move aside.
+   * @return The name of the moved aside file.
+   * @throws IOException
+   */
+  public static Path moveAsideBadEditsFile(final FileSystem fs,
+      final Path edits)
+  throws IOException {
+    Path moveAsideName = new Path(edits.getParent(), edits.getName() + "." +
+      System.currentTimeMillis());
+    if (!fs.rename(edits, moveAsideName)) {
+      LOG.warn("Rename failed from " + edits + " to " + moveAsideName);
+    }
+    return moveAsideName;
+  }
+
+  /**
+   * @param regiondir This regions directory in the filesystem.
+   * @return The directory that holds recovered edits files for the region
+   * <code>regiondir</code>
+   */
+  public static Path getRegionDirRecoveredEditsDir(final Path regiondir) {
+    return new Path(regiondir, RECOVERED_EDITS_DIR);
+  }
 
   /**
    *

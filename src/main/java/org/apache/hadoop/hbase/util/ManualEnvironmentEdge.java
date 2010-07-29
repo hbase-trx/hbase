@@ -17,20 +17,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hbase.regionserver.wal;
-
-import org.apache.hadoop.fs.Path;
+package org.apache.hadoop.hbase.util;
 
 /**
- * Interface that defines all actions that can be listened to coming
- * from the HLog. The calls are done in sync with what happens over in the
- * HLog so make sure your implementation is fast.
+ * An environment edge that uses a manually set value. This is useful for testing events that are supposed to
+ * happen in the same millisecond.
  */
-public interface LogActionsListener {
+public class ManualEnvironmentEdge implements EnvironmentEdge {
 
-  /**
-   * Notify the listener that a new file is available
-   * @param newFile the path to the new hlog
-   */
-  public void logRolled(Path newFile);
+  // Sometimes 0 ts might have a special value, so lets start with 1
+  protected long value = 1L;
+
+  public void setValue(long newValue) {
+    value = newValue;
+  }
+
+  @Override
+  public long currentTimeMillis() {
+    return this.value;
+  }
 }
