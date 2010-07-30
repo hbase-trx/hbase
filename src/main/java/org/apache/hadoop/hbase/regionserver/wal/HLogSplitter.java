@@ -354,7 +354,7 @@ public class HLogSplitter {
         .getTablename());
     Path regiondir = HRegion.getRegionDir(tableDir, HRegionInfo
         .encodeRegionName(logEntry.getKey().getRegionName()));
-    Path dir = getRegionDirRecoveredEditsDir(regiondir);
+    Path dir = HLog.getRegionDirRecoveredEditsDir(regiondir);
     if (!fs.exists(dir)) {
       if (!fs.mkdirs(dir))
         LOG.warn("mkdir failed on " + dir);
