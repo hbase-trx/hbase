@@ -367,13 +367,13 @@ public class HLogSplitter {
     return String.format("%019d", seqid);
   }
   
-  /*
+  /**
    * Parse a single hlog and put the edits in @splitLogsMap
    * 
    * @param logfile to split
    * 
    * @param splitLogsMap output parameter: a map with region names as keys and a
-   * list of edits as values
+   *        list of edits as values
    * 
    * @param fs the filesystem
    * 
@@ -381,7 +381,7 @@ public class HLogSplitter {
    * 
    * @throws IOException if hlog is corrupted, or can't be open
    */
-  private static void parseHLog(final FileStatus logfile,
+  private void parseHLog(final FileStatus logfile,
       final Map<byte[], LinkedList<Entry>> splitLogsMap, final FileSystem fs,
       final Configuration conf) throws IOException {
     // Check for possibly empty file. With appends, currently Hadoop reports a
@@ -396,7 +396,7 @@ public class HLogSplitter {
     Reader in;
     int editsCount = 0;
     try {
-      in = HLog.getReader(fs, path, conf);
+      in = getReader(fs, path, conf);
     } catch (EOFException e) {
       if (length <= 0) {
         // TODO should we ignore an empty, not-last log file if skip.errors is

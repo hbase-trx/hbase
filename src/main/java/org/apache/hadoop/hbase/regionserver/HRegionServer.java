@@ -608,13 +608,10 @@ public class HRegionServer implements HRegionInterface,
       if (this.fsOk) {
         // Only try to clean up if the file system is available
         try {
-          if (this.hlog != null) {
-            this.hlog.close();
-            LOG.info("On abort, closed hlog");
-          }
+          cleanupOnAbort();
         } catch (Throwable e) {
-          LOG.error("Unable to close log in abort",
-            RemoteExceptionHandler.checkThrowable(e));
+          LOG.error("Unable to cleanup in abort",
+              RemoteExceptionHandler.checkThrowable(e));
         }
         closeAllRegions(); // Don't leave any open file handles
       }
@@ -622,9 +619,7 @@ public class HRegionServer implements HRegionInterface,
     } else {
       ArrayList<HRegion> closedRegions = closeAllRegions();
       try {
-        if (this.hlog != null) {
-          hlog.closeAndDelete();
-        }
+        cleanupOnShutdown();
       } catch (Throwable e) {
         LOG.error("Close and delete failed",
           RemoteExceptionHandler.checkThrowable(e));
@@ -661,6 +656,25 @@ public class HRegionServer implements HRegionInterface,
     }
     LOG.info(Thread.currentThread().getName() + " exiting");
   }
+
+  protected void cleanupOnShutdown() throws IOException {
+    if (this.hlog != null) {
+      hlog.closeAndDelete();
+    }
+  }
+
+  /**
+   * Close hlog on abort.
+   * 
+   * @throws IOException
+   */
+  protected void cleanupOnAbort() throws IOException {
+    if (this.hlog != null) {
+      this.hlog.close();
+      LOG.info("On abort, closed hlog");
+    }
+  }
+
 
   /*
    * Add to the passed <code>msgs</code> messages to pass to the master.
@@ -1534,7 +1548,7 @@ public class HRegionServer implements HRegionInterface,
   }
 
   /** Called either when the master tells us to restart or from stop() */
-  ArrayList<HRegion> closeAllRegions() {
+  protected ArrayList<HRegion> closeAllRegions() {
     ArrayList<HRegion> regionsToClose = new ArrayList<HRegion>();
     this.lock.writeLock().lock();
     try {
