@@ -160,9 +160,10 @@ public class TestHLog  {
         log.rollWriter();
       }
       log.close();
-      Path splitsdir = new Path(dir, "splits");
+      Path splitsdir = new Path(this.dir, "splits");
+      HLogSplitter logSplitter = HLogSplitter.createLogSplitter(conf);
       List<Path> splits =
-        HLog.splitLog(splitsdir, logdir, oldLogDir, fs, conf);
+        logSplitter.splitLog(splitsdir, logdir, oldLogDir, fs, conf);
       verifySplits(splits, howmany);
       log = null;
     } finally {

@@ -608,10 +608,7 @@ public class HRegionServer implements HRegionInterface,
       if (this.fsOk) {
         // Only try to clean up if the file system is available
         try {
-          if (this.hlog != null) {
-            this.hlog.close();
-            LOG.info("On abort, closed hlog");
-          }
+          cleanupOnAbort();
         } catch (Throwable e) {
           LOG.error("Unable to close log in abort",
             RemoteExceptionHandler.checkThrowable(e));
@@ -623,7 +620,7 @@ public class HRegionServer implements HRegionInterface,
       ArrayList<HRegion> closedRegions = closeAllRegions();
       try {
         if (this.hlog != null) {
-          hlog.closeAndDelete();
+          cleanupOnShutdown();
         }
       } catch (Throwable e) {
         LOG.error("Close and delete failed",
@@ -660,6 +657,24 @@ public class HRegionServer implements HRegionInterface,
       join();
     }
     LOG.info(Thread.currentThread().getName() + " exiting");
+  }
+  
+  protected void cleanupOnShutdown() throws IOException {
+    if (this.hlog != null) {
+      hlog.closeAndDelete();
+    }
+  }
+
+  /**
+   * Close hlog on abort.
+   * 
+   * @throws IOException
+   */
+  protected void cleanupOnAbort() throws IOException {
+    if (this.hlog != null) {
+      this.hlog.close();
+      LOG.info("On abort, closed hlog");
+    }
   }
 
   /*

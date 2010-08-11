@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.ipc.HRegionInterface;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
+import org.apache.hadoop.hbase.regionserver.wal.HLogSplitter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.master.RegionManager.RegionState;
 
@@ -296,9 +297,12 @@ class ProcessServerShutdown extends RegionServerOperation {
           return false;
         }
         try {
-          HLog.splitLog(master.getRootDir(), rsLogDir,
-              this.master.getOldLogDir(), this.master.getFileSystem(),
-            this.master.getConfiguration());
+          HLogSplitter logSplitter = HLogSplitter.createLogSplitter(master
+              .getConfiguration());
+          logSplitter.splitLog(master.getRootDir(), rsLogDir,
+              master
+              .getOldLogDir(), master.getFileSystem(), master
+              .getConfiguration());
         } finally {
           master.splitLogLock.unlock();
         }

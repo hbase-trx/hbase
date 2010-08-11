@@ -86,6 +86,7 @@ import org.apache.hadoop.hbase.master.metrics.MasterMetrics;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
+import org.apache.hadoop.hbase.regionserver.wal.HLogSplitter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.hbase.util.InfoServer;
@@ -642,7 +643,9 @@ public class HMaster extends Thread implements HMasterInterface,
         Path logDir =
           new Path(this.rootdir, HLog.getHLogDirectoryName(serverName));
         try {
-          HLog.splitLog(this.rootdir, logDir, oldLogDir, this.fs, getConfiguration());
+          HLogSplitter logSplitter = HLogSplitter.createLogSplitter(conf);
+          logSplitter.splitLog(this.rootdir, logDir, oldLogDir, this.fs,
+              getConfiguration());
         } catch (IOException e) {
           LOG.error("Failed splitting " + logDir.toString(), e);
         } finally {
