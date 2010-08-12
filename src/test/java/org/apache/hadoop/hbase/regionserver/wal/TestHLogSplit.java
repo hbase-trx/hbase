@@ -138,7 +138,7 @@ public class TestHLogSplit {
     try {
     (new ZombieNewLogWriterRegionServer(stop)).start();
     HLogSplitter logSplitter = HLogSplitter.createLogSplitter(conf);
-      logSplitter.splitLog(hbaseDir, hlogDir, oldLogDir, fs, conf);
+    logSplitter.splitLog(hbaseDir, hlogDir, oldLogDir, fs, conf);
     } finally {
       stop.set(true);
     }
@@ -442,8 +442,6 @@ public class TestHLogSplit {
 
   }
 
-
-  @Ignore
   @Test(expected = IOException.class)
   public void testSplitWillFailIfWritingToRegionFails() throws Exception {
     //leave 5th log open so we could append the "trap"
@@ -627,16 +625,6 @@ public class TestHLogSplit {
     }
   }
 
-  private Path getLogForRegion(Path rootdir, byte[] table, String region) {
-    return new Path(HRegion.getRegionDir(HTableDescriptor
-            .getTableDir(rootdir, table),
-            HRegionInfo.encodeRegionName(region.getBytes())),
-            HLogSplitter.RECOVERED_EDITS);
-  }
-
-
-  // TODO MS: fix this.
-  /*
   private Path getLogForRegion(Path rootdir, byte[] table, String region)
   throws IOException {
     Path tdir = HTableDescriptor.getTableDir(rootdir, table);
@@ -646,7 +634,7 @@ public class TestHLogSplit {
     assertEquals(1, files.length);
     return files[0].getPath();
   }
-  */
+
 
   private void corruptHLog(Path path, Corruptions corruption, boolean close,
                            FileSystem fs) throws IOException {
@@ -749,31 +737,24 @@ public class TestHLogSplit {
   }
 
   private int compareHLogSplitDirs(Path p1, Path p2) throws IOException {
-    FileStatus[] f1 = fs.listStatus(p1);
-    FileStatus[] f2 = fs.listStatus(p2);
+      FileStatus[] f1 = fs.listStatus(p1);
+      FileStatus[] f2 = fs.listStatus(p2);
 
-    for (int i=0; i<f1.length; i++) {
-      if (!logsAreEqual(
-          new Path(f1[i].getPath(), HLogSplitter.RECOVERED_EDITS), new Path(
-              f2[i].getPath(), HLogSplitter.RECOVERED_EDITS))) {
-
-      // TODO MS: FIX THIS:
-/*
-      // Regions now have a directory named RECOVERED_EDITS_DIR and in here
-      // are split edit files.  In below presume only 1.
-      Path rd1 = HLog.getRegionDirRecoveredEditsDir(f1[i].getPath());
-      FileStatus [] rd1fs = fs.listStatus(rd1);
-      assertEquals(1, rd1fs.length);
-      Path rd2 = HLog.getRegionDirRecoveredEditsDir(f2[i].getPath());
-      FileStatus [] rd2fs = fs.listStatus(rd2);
-      assertEquals(1, rd2fs.length);
-      if (!logsAreEqual(rd1fs[0].getPath(), rd2fs[0].getPath())) {
-*/
-        return -1;
+      for (int i=0; i<f1.length; i++) {
+        // Regions now have a directory named RECOVERED_EDITS_DIR and in here
+        // are split edit files.  In below presume only 1.
+        Path rd1 = HLog.getRegionDirRecoveredEditsDir(f1[i].getPath());
+        FileStatus [] rd1fs = fs.listStatus(rd1);
+        assertEquals(1, rd1fs.length);
+        Path rd2 = HLog.getRegionDirRecoveredEditsDir(f2[i].getPath());
+        FileStatus [] rd2fs = fs.listStatus(rd2);
+        assertEquals(1, rd2fs.length);
+        if (!logsAreEqual(rd1fs[0].getPath(), rd2fs[0].getPath())) {
+          return -1;
+        }
       }
+      return 0;
     }
-    return 0;
-  }
 
   private boolean logsAreEqual(Path p1, Path p2) throws IOException {
     HLog.Reader in1, in2;
