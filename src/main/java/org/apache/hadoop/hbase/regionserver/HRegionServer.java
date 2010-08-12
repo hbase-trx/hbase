@@ -619,9 +619,7 @@ public class HRegionServer implements HRegionInterface,
     } else {
       ArrayList<HRegion> closedRegions = closeAllRegions();
       try {
-        if (this.hlog != null) {
-          cleanupOnShutdown();
-        }
+        cleanupOnShutdown();
       } catch (Throwable e) {
         LOG.error("Close and delete failed",
           RemoteExceptionHandler.checkThrowable(e));
@@ -658,7 +656,16 @@ public class HRegionServer implements HRegionInterface,
     }
     LOG.info(Thread.currentThread().getName() + " exiting");
   }
-  
+
+  /**
+   * Called during normal server shutdown. Meant to be used for closing file
+   * handles, etc.
+   * <p>
+   * Default implementation closes the <code>hlog</code> and wipes the entire
+   * log directory for this server.
+   * 
+   * @throws IOException
+   */
   protected void cleanupOnShutdown() throws IOException {
     if (this.hlog != null) {
       hlog.closeAndDelete();
@@ -666,7 +673,10 @@ public class HRegionServer implements HRegionInterface,
   }
 
   /**
-   * Close hlog on abort.
+   * Called during abort of server. Meant to be used for closing file handles,
+   * etc.
+   * <p>
+   * Default implementation closes <code>hlog</code>.
    * 
    * @throws IOException
    */
@@ -677,8 +687,9 @@ public class HRegionServer implements HRegionInterface,
     }
   }
 
-  /*
+  /**
    * Add to the passed <code>msgs</code> messages to pass to the master.
+   * 
    * @param msgs Current outboundMsgs array; we'll add messages to this List.
    */
   private void addOutboundMsgs(final List<HMsg> msgs) {
