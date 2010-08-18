@@ -1453,7 +1453,9 @@ public class HRegionServer implements HRegionInterface,
     if (region == null) {
       try {
         zkUpdater.startRegionOpenEvent(null, true);
-        region = instantiateRegion(regionInfo, this.hlog);
+        region = instantiateRegion(regionInfo);
+        initializeRegion(region);
+
         // Startup a compaction early if one is needed, if region has references
         // or if a store has too many store files
         if (region.hasReferences() || region.hasTooManyStoreFiles()) {
@@ -1488,27 +1490,44 @@ public class HRegionServer implements HRegionInterface,
     }
   }
 
-  /*
-   * @param regionInfo RegionInfo for the Region we're to instantiate and
-   * initialize.
-   * @param wal Set into here the regions' seqid.
+
+
+  /**
+   * Create an HRegion instance with the given info. Initialize will be called
+   * on the new region separately.
+   * 
+   * @param regionInfo RegionInfo for the Region we're to instantiate
    * @return
    * @throws IOException
    */
-  protected HRegion instantiateRegion(final HRegionInfo regionInfo, final HLog wal)
-  throws IOException {
+  protected HRegion instantiateRegion(final HRegionInfo regionInfo) {
     Path dir =
       HTableDescriptor.getTableDir(rootDir, regionInfo.getTableDesc().getName());
     HRegion r = HRegion.newHRegion(dir, this.hlog, this.fs, conf, regionInfo,
-      this.cacheFlusher);
-    long seqid = r.initialize(new Progressable() {
+        this.cacheFlusher);
+    return r;
+  }
+
+  /**
+   * Initialize an HRegion and update the hlog sequence number if currently less
+   * than the max sequence number of the given region.
+   * 
+   * @param region
+   * @return
+   * @throws IOException
+   */
+  protected long initializeRegion(final HRegion region) throws IOException {
+    long seqid = region.initialize(new Progressable() {
+      @Override
       public void progress() {
-        addProcessingMessage(regionInfo);
+        addProcessingMessage(region.getRegionInfo());
       }
     });
-    // If seqid  > current wal seqid, the wal seqid is updated.
-    if (wal != null) wal.setSequenceNumber(seqid);
-    return r;
+
+    // If seqid > current wal seqid, the wal seqid is updated.
+    if (hlog != null)
+      hlog.setSequenceNumber(seqid);
+    return seqid;
   }
 
   /**
