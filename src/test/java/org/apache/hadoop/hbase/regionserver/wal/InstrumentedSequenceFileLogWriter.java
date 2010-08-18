@@ -25,12 +25,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 
 public class InstrumentedSequenceFileLogWriter extends SequenceFileLogWriter {
 
-  // public InstrumentedSequenceFileLogWriter(Class<? extends HLogKey> keyClass)
-  // {
-   public InstrumentedSequenceFileLogWriter() {
-   super(HLogKey.class);
-   }
-  
+  public InstrumentedSequenceFileLogWriter() {
+    super(HLogKey.class);
+  }
+
   public static boolean activateFailure = false;
   @Override
     public void append(HLog.Entry entry) throws IOException {

@@ -313,7 +313,7 @@ public class TestHLog  {
       }
     }
   }
-  
+
   // For this test to pass, requires:
   // 1. HDFS-200 (append support)
   // 2. HDFS-988 (SafeMode should freeze file operations
@@ -338,7 +338,7 @@ public class TestHLog  {
     wal.sync(true);
      int namenodePort = cluster.getNameNodePort();
     final Path walPath = wal.computeFilename();
-    
+
 
     // Stop the cluster.  (ensure restart since we're sharing MiniDFSCluster)
     try {
@@ -377,11 +377,11 @@ public class TestHLog  {
     } catch (InterruptedException e) {
       LOG.info(e);
     }
-    
+
     // Now try recovering the log, like the HMaster would do
     final FileSystem recoveredFs = fs;
     final Configuration rlConf = conf;
-    
+
     class RecoverLogThread extends Thread {
       public Exception exception = null;
       public void run() {

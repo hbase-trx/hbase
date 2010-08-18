@@ -665,7 +665,7 @@ public class HRegionServer implements HRegionInterface,
 
   /**
    * Close hlog on abort.
-   * 
+   *
    * @throws IOException
    */
   protected void cleanupOnAbort() throws IOException {
@@ -742,14 +742,14 @@ public class HRegionServer implements HRegionInterface,
           this.serverInfo.getServerAddress() + ", Now=" + hra);
         this.serverInfo.setServerAddress(hsa);
       }
-      
-      // hack! Maps DFSClient => RegionServer for logs.  HDFS made this 
+
+      // hack! Maps DFSClient => RegionServer for logs.  HDFS made this
       // config param for task trackers, but we can piggyback off of it.
       if (this.conf.get("mapred.task.id") == null) {
-        this.conf.set("mapred.task.id", 
+        this.conf.set("mapred.task.id",
             "hb_rs_" + this.serverInfo.getServerName());
       }
-      
+
       // Master sent us hbase.rootdir to use. Should be fully qualified
       // path with file system specification included.  Set 'fs.defaultFS'
       // to match the filesystem on hbase.rootdir else underlying hadoop hdfs
@@ -1185,7 +1185,7 @@ public class HRegionServer implements HRegionInterface,
     }
     stop();
   }
-  
+
   /**
    * @see HRegionServer#abort(String, Throwable)
    */
@@ -1447,7 +1447,7 @@ public class HRegionServer implements HRegionInterface,
   void openRegion(final HRegionInfo regionInfo) {
     Integer mapKey = Bytes.mapKey(regionInfo.getRegionName());
     HRegion region = this.onlineRegions.get(mapKey);
-    RSZookeeperUpdater zkUpdater = 
+    RSZookeeperUpdater zkUpdater =
       new RSZookeeperUpdater(conf, serverInfo.getServerName(),
           regionInfo.getEncodedName());
     if (region == null) {
@@ -1468,8 +1468,8 @@ public class HRegionServer implements HRegionInterface,
         // an error. We can't do that now because that would be an incompatible
         // change that would require a migration
         try {
-          HMsg hmsg = new HMsg(HMsg.Type.MSG_REPORT_CLOSE, 
-                               regionInfo, 
+          HMsg hmsg = new HMsg(HMsg.Type.MSG_REPORT_CLOSE,
+                               regionInfo,
                                StringUtils.stringifyException(t).getBytes());
           zkUpdater.abortOpenRegion(hmsg);
         } catch (IOException e1) {
@@ -1725,16 +1725,16 @@ public class HRegionServer implements HRegionInterface,
       if (!region.getRegionInfo().isMetaTable()) {
         this.cacheFlusher.reclaimMemStoreMemory();
       }
-      
+
       @SuppressWarnings("unchecked")
       Pair<Put, Integer>[] putsWithLocks = new Pair[puts.size()];
-      
+
       int i = 0;
       for (Put p : puts) {
         Integer lock = getLockFromId(p.getLockId());
         putsWithLocks[i++] = new Pair<Put, Integer>(p, lock);
       }
-      
+
       this.requestCount.addAndGet(puts.size());
       OperationStatusCode[] codes = region.put(putsWithLocks);
       for (i = 0; i < codes.length; i++) {

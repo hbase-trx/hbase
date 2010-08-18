@@ -49,7 +49,6 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -231,7 +230,7 @@ public class TestHLogSplit {
     corruptHLog(new Path(hlogDir, HLOG_FILE_PREFIX + "5"),
             Corruptions.APPEND_GARBAGE, true, fs);
     fs.initialize(fs.getUri(), conf);
-    
+
     HLogSplitter logSplitter = HLogSplitter.createLogSplitter(conf);
     logSplitter.splitLog(hbaseDir, hlogDir, oldLogDir, fs, conf);
 
@@ -250,7 +249,7 @@ public class TestHLogSplit {
     corruptHLog(new Path(hlogDir, HLOG_FILE_PREFIX + "5"),
             Corruptions.INSERT_GARBAGE_ON_FIRST_LINE, true, fs);
     fs.initialize(fs.getUri(), conf);
-    
+
     HLogSplitter logSplitter = HLogSplitter.createLogSplitter(conf);
     logSplitter.splitLog(hbaseDir, hlogDir, oldLogDir, fs, conf);
 
@@ -387,7 +386,7 @@ public class TestHLogSplit {
       // hadoop 0.21 throws FNFE whereas hadoop 0.20 returns null
     }
   }
-/* DISABLED for now.  TODO: HBASE-2645 
+/* DISABLED for now.  TODO: HBASE-2645
   @Test
   public void testLogCannotBeWrittenOnceParsed() throws IOException {
     AtomicLong counter = new AtomicLong(0);
@@ -425,7 +424,7 @@ public class TestHLogSplit {
     generateHLogs(-1);
     fs.initialize(fs.getUri(), conf);
     Thread zombie = new ZombieNewLogWriterRegionServer(stop);
-    
+
     try {
       zombie.start();
       try {
@@ -444,7 +443,6 @@ public class TestHLogSplit {
 
 
 
-  @Ignore
   @Test(expected = IOException.class)
   public void testSplitWillFailIfWritingToRegionFails() throws Exception {
     //leave 5th log open so we could append the "trap"

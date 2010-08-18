@@ -287,7 +287,7 @@ public class HBaseTestingUtility {
     // Do old style too just to be safe.
     this.conf.set("fs.default.name", fs.getUri().toString());
     this.dfsCluster.waitClusterUp();
-   
+
     // Start up a zk cluster.
     if (this.zkCluster == null) {
       startMiniZKCluster(this.clusterTestBuildDir);

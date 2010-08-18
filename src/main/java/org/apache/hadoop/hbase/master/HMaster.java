@@ -165,7 +165,7 @@ public class HMaster extends Thread implements HMasterInterface,
   private long lastFragmentationQuery = -1L;
   private Map<String, Integer> fragmentation = null;
   private final RegionServerOperationQueue regionServerOperationQueue;
-  
+
   // True if this is the master that started the cluster.
   boolean isClusterStartup;
 
@@ -176,14 +176,14 @@ public class HMaster extends Thread implements HMasterInterface,
    */
   public HMaster(Configuration conf) throws IOException {
     this.conf = conf;
-    
-    // Figure out if this is a fresh cluster start. This is done by checking the 
-    // number of RS ephemeral nodes. RS ephemeral nodes are created only after 
-    // the primary master has written the address to ZK. So this has to be done 
+
+    // Figure out if this is a fresh cluster start. This is done by checking the
+    // number of RS ephemeral nodes. RS ephemeral nodes are created only after
+    // the primary master has written the address to ZK. So this has to be done
     // before we race to write our address to zookeeper.
     zooKeeperWrapper = ZooKeeperWrapper.createInstance(conf, HMaster.class.getName());
     isClusterStartup = (zooKeeperWrapper.scanRSDirectory().size() == 0);
-    
+
     // Get my address and create an rpc server instance.  The rpc-server port
     // can be ephemeral...ensure we have the correct info
     HServerAddress a = new HServerAddress(getMyAddress(this.conf));
@@ -199,7 +199,7 @@ public class HMaster extends Thread implements HMasterInterface,
     this.sleeper = new Sleeper(this.threadWakeFrequency, this.closed);
     this.connection = ServerConnectionManager.getConnection(conf);
 
-    // hack! Maps DFSClient => Master for logs.  HDFS made this 
+    // hack! Maps DFSClient => Master for logs.  HDFS made this
     // config param for task trackers, but we can piggyback off of it.
     if (this.conf.get("mapred.task.id") == null) {
       this.conf.set("mapred.task.id", "hb_m_" + this.address.toString());
@@ -253,9 +253,9 @@ public class HMaster extends Thread implements HMasterInterface,
 
     serverManager = new ServerManager(this);
 
-    
-    // Start the unassigned watcher - which will create the unassigned region 
-    // in ZK. This is needed before RegionManager() constructor tries to assign 
+
+    // Start the unassigned watcher - which will create the unassigned region
+    // in ZK. This is needed before RegionManager() constructor tries to assign
     // the root region.
     ZKUnassignedWatcher.start(this.conf, this);
     // start the "close region" executor service
@@ -263,7 +263,7 @@ public class HMaster extends Thread implements HMasterInterface,
     // start the "open region" executor service
     HBaseEventType.RS2ZK_REGION_OPENED.startMasterExecutorService(address.toString());
 
-    
+
     // start the region manager
     regionManager = new RegionManager(this);
 
@@ -273,19 +273,19 @@ public class HMaster extends Thread implements HMasterInterface,
     this.closed.set(false);
     LOG.info("HMaster initialized on " + this.address.toString());
   }
-  
+
   /**
-   * Returns true if this master process was responsible for starting the 
+   * Returns true if this master process was responsible for starting the
    * cluster.
    */
   public boolean isClusterStartup() {
     return isClusterStartup;
   }
-  
+
   public void resetClusterStartup() {
     isClusterStartup = false;
   }
-  
+
   public HServerAddress getHServerAddress() {
     return address;
   }
@@ -922,10 +922,10 @@ public class HMaster extends Thread implements HMasterInterface,
         }
     };
 
-    MetaScanner.metaScan(conf, visitor, tableName); 
+    MetaScanner.metaScan(conf, visitor, tableName);
     return result;
   }
-  
+
   private Pair<HRegionInfo, HServerAddress> metaRowToRegionPair(
       Result data) throws IOException {
     HRegionInfo info = Writables.getHRegionInfo(
@@ -939,7 +939,7 @@ public class HMaster extends Thread implements HMasterInterface,
     } else {
       //undeployed
       return new Pair<HRegionInfo, HServerAddress>(info, null);
-    }    
+    }
   }
 
   /**
@@ -953,7 +953,7 @@ public class HMaster extends Thread implements HMasterInterface,
   throws IOException {
     final AtomicReference<Pair<HRegionInfo, HServerAddress>> result =
       new AtomicReference<Pair<HRegionInfo, HServerAddress>>(null);
-    
+
     MetaScannerVisitor visitor =
       new MetaScannerVisitor() {
         @Override
@@ -975,12 +975,12 @@ public class HMaster extends Thread implements HMasterInterface,
     MetaScanner.metaScan(conf, visitor, tableName, rowKey, 1);
     return result.get();
   }
-  
+
   Pair<HRegionInfo,HServerAddress> getTableRegionFromName(
       final byte [] regionName)
   throws IOException {
     byte [] tableName = HRegionInfo.parseRegionName(regionName)[0];
-    
+
     Set<MetaRegion> regions = regionManager.getMetaRegionsForTable(tableName);
     for (MetaRegion m: regions) {
       byte [] metaRegionName = m.getRegionName();
@@ -1184,8 +1184,8 @@ public class HMaster extends Thread implements HMasterInterface,
    */
   @Override
   public void process(WatchedEvent event) {
-    LOG.debug("Event " + event.getType() + 
-              " with state " + event.getState() +  
+    LOG.debug("Event " + event.getType() +
+              " with state " + event.getState() +
               " with path " + event.getPath());
     // Master should kill itself if its session expired or if its
     // znode was deleted manually (usually for testing purposes)
@@ -1209,7 +1209,7 @@ public class HMaster extends Thread implements HMasterInterface,
           throw new Exception("Another Master is currently active");
         }
 
-        // we are a failed over master, reset the fact that we started the 
+        // we are a failed over master, reset the fact that we started the
         // cluster
         resetClusterStartup();
         // Verify the cluster to see if anything happened while we were away
@@ -1306,7 +1306,7 @@ public class HMaster extends Thread implements HMasterInterface,
           }
         }
       }
-      
+
       // check if we are the backup master - override the conf if so
       if (cmd.hasOption("backup")) {
         conf.setBoolean(HConstants.MASTER_TYPE_BACKUP, true);

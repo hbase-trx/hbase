@@ -132,7 +132,7 @@ public class SequenceFileLogReader implements HLog.Reader {
       } catch (IllegalAccessException e) {
         throw new IOException(e);
       }
-      
+
       WALEdit val = new WALEdit();
       if (reader.next(key, val)) {
         return new HLog.Entry(key, val);

@@ -48,7 +48,7 @@ public class HLogSplitter {
    * code, one per region
    */
   public static final String RECOVERED_EDITS = "recovered.edits";
-  
+
   public static HLogSplitter createLogSplitter(Configuration conf) {
     Class<? extends HLogSplitter> splitterClass = (Class<? extends HLogSplitter>) conf
         .getClass(LOG_SPLITTER_IMPL, HLogSplitter.class);
@@ -61,8 +61,6 @@ public class HLogSplitter {
     }
   }
 
-  
-  
   // Private immutable datastructure to hold Writer and its Path.
   private final static class WriterAndPath {
     final Path p;
@@ -78,7 +76,7 @@ public class HLogSplitter {
    * Split up a bunch of regionserver commit log files that are no longer being
    * written to, into new files, one per region for region to replay on startup.
    * Delete the old log files when finished.
-   * 
+   *
    * @param rootDir
    *          qualified root directory of the HBase instance
    * @param srcDir
@@ -134,16 +132,16 @@ public class HLogSplitter {
         + " millis for " + srcDir.toString());
     return splits;
   }
-  
+
   /**
    * Sorts the HLog edits in the given list of logfiles (that are a mix of edits
    * on multiple regions) by region and then splits them per region directories,
    * in batches of (hbase.hlog.split.batch.size)
-   * 
+   *
    * A batch consists of a set of log files that will be sorted in a single map
    * of edits indexed by region the resulting map will be concurrently written
    * by multiple threads to their corresponding regions
-   * 
+   *
    * Each batch consists of more more log files that are - recovered (files is
    * opened for append then closed to ensure no process is writing into it) -
    * parsed (each edit in the log is appended to a list of edits indexed by
@@ -152,9 +150,9 @@ public class HLogSplitter {
    * indexed by region are concurrently written to their corresponding region
    * region directories - original files are then archived to a different
    * directory
-   * 
-   * 
-   * 
+   *
+   *
+   *
    * @param rootDir
    *          hbase directory
    * @param srcDir
@@ -231,11 +229,11 @@ public class HLogSplitter {
     }
     return splits;
   }
-  
+
   /**
    * Takes splitLogsMap and concurrently writes them to region directories using
    * a thread pool
-   * 
+   *
    * @param splitLogsMap
    *          map that contains the log splitting result indexed by region
    * @param logWriters
@@ -301,12 +299,12 @@ public class HLogSplitter {
       }
     }
   }
-  
+
   /**
    * Moves processed logs to a oldLogDir after successful processing Moves
    * corrupted logs (any log that couldn't be successfully parsed to corruptDir
    * (.corrupt) for later investigation
-   * 
+   *
    * @param corruptedLogs
    * @param processedLogs
    * @param oldLogDir
@@ -366,19 +364,19 @@ public class HLogSplitter {
   static String formatRecoveredEditsFileName(final long seqid) {
     return String.format("%019d", seqid);
   }
-  
+
   /**
    * Parse a single hlog and put the edits in @splitLogsMap
-   * 
+   *
    * @param logfile to split
-   * 
+   *
    * @param splitLogsMap output parameter: a map with region names as keys and a
    *        list of edits as values
-   * 
+   *
    * @param fs the filesystem
-   * 
+   *
    * @param conf the configuration
-   * 
+   *
    * @throws IOException if hlog is corrupted, or can't be open
    */
   private void parseHLog(final FileStatus logfile,
@@ -437,7 +435,7 @@ public class HLogSplitter {
       }
     }
   }
-  
+
   private Callable<Void> createNewSplitter(final Path rootDir,
       final Map<byte[], WriterAndPath> logWriters,
       final Map<byte[], LinkedList<Entry>> logEntries, final byte[] region,
@@ -487,7 +485,7 @@ public class HLogSplitter {
       }
     };
   }
-  
+
   private static Path getRegionLogPath(Entry logEntry, Path rootDir) {
     Path tableDir = HTableDescriptor.getTableDir(rootDir, logEntry.getKey()
         .getTablename());
@@ -505,6 +503,4 @@ public class HLogSplitter {
       throws IOException {
     return HLog.getReader(fs, curLogFile, conf);
   }
-
-  
 }
