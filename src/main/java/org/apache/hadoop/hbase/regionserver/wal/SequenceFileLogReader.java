@@ -92,12 +92,21 @@ public class SequenceFileLogReader implements HLog.Reader {
   Configuration conf;
   WALReader reader;
 
-   private final Class<? extends HLogKey> keyClass;
+  private Class<? extends HLogKey> keyClass;
 
-  // public SequenceFileLogReader() {
-  // }
+  /**
+   * Default constructor.
+   */
+  public SequenceFileLogReader() {
+  }
 
-   public SequenceFileLogReader(Class<? extends HLogKey> keyClass) {
+  /**
+   * This constructor allows a specific HLogKey implementation to override that
+   * which would otherwise be chosen via configuration property.
+   * 
+   * @param keyClass
+   */
+  public SequenceFileLogReader(Class<? extends HLogKey> keyClass) {
     this.keyClass = keyClass;
   }
 
@@ -122,15 +131,17 @@ public class SequenceFileLogReader implements HLog.Reader {
   @Override
   public HLog.Entry next(HLog.Entry reuse) throws IOException {
     if (reuse == null) {
-      // HLogKey key = HLog.newKey(conf);
-
-       HLogKey key;
-      try {
-        key = keyClass.newInstance();
-      } catch (InstantiationException e) {
-        throw new IOException(e);
-      } catch (IllegalAccessException e) {
-        throw new IOException(e);
+      HLogKey key;
+      if (null == keyClass) {
+        key = HLog.newKey(conf);
+      } else {
+        try {
+          key = keyClass.newInstance();
+        } catch (InstantiationException e) {
+          throw new IOException(e);
+        } catch (IllegalAccessException e) {
+          throw new IOException(e);
+        }
       }
 
       WALEdit val = new WALEdit();

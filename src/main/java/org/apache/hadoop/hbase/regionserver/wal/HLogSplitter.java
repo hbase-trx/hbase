@@ -1,3 +1,22 @@
+/**
+ * Copyright 2010 The Apache Software Foundation
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.hadoop.hbase.regionserver.wal;
 
 import static org.apache.hadoop.hbase.util.FSUtils.recoverFileLease;
@@ -37,6 +56,13 @@ import org.apache.hadoop.hbase.util.FSUtils;
 
 import com.google.common.util.concurrent.NamingThreadFactory;
 
+/**
+ * <p>
+ * This class is responsible for splitting up a bunch of regionserver commit log
+ * files that are no longer being written to, into new files, one per region for
+ * region to replay on startup. Delete the old log files when finished.
+ * </p>
+ */
 public class HLogSplitter {
 
   private static final String LOG_SPLITTER_IMPL = "hbase.hlog.splitter.impl";
@@ -49,7 +75,16 @@ public class HLogSplitter {
    */
   public static final String RECOVERED_EDITS = "recovered.edits";
 
+  /**
+   * Create a new HLogSplitter using the given {@link Configuration} and the
+   * <code>hbase.hlog.splitter.impl</code> property to derived the instance
+   * class to use.
+   * 
+   * @param conf
+   * @return New HLogSplitter instance
+   */
   public static HLogSplitter createLogSplitter(Configuration conf) {
+    @SuppressWarnings("unchecked")
     Class<? extends HLogSplitter> splitterClass = (Class<? extends HLogSplitter>) conf
         .getClass(LOG_SPLITTER_IMPL, HLogSplitter.class);
     try {
@@ -445,7 +480,7 @@ public class HLogSplitter {
         return "Split writer thread for region " + Bytes.toStringBinary(region);
       }
 
-      @Override
+        @Override
       public Void call() throws IOException {
         LinkedList<Entry> entries = logEntries.get(region);
         LOG.debug(this.getName() + " got " + entries.size() + " to process");
@@ -455,24 +490,25 @@ public class HLogSplitter {
           WriterAndPath wap = logWriters.get(region);
           for (Entry logEntry : entries) {
             if (wap == null) {
-              Path logFile = getRegionLogPath(logEntry, rootDir);
-              if (fs.exists(logFile)) {
-                LOG
-                    .warn("Found existing old hlog file. It could be the result of a previous"
-                        + "failed split attempt. Deleting "
-                        + logFile
-                        + ", length=" + fs.getFileStatus(logFile).getLen());
-                fs.delete(logFile, false);
+              Path regionedits = getRegionSplitEditsPath(fs, logEntry, rootDir);
+              if (fs.exists(regionedits)) {
+                LOG.warn("Found existing old edits file. It could be the "
+                    + "result of a previous failed split attempt. Deleting "
+                    + regionedits + ", length="
+                    + fs.getFileStatus(regionedits).getLen());
+                if (!fs.delete(regionedits, false)) {
+                  LOG.warn("Failed delete of old " + regionedits);
+                }
               }
-              Writer w = createWriter(fs, logFile, conf);
-              wap = new WriterAndPath(logFile, w);
+              Writer w = createWriter(fs, regionedits, conf);
+              wap = new WriterAndPath(regionedits, w);
               logWriters.put(region, wap);
-              LOG.debug("Creating writer path=" + logFile + " region="
+              LOG.debug("Creating writer path=" + regionedits + " region="
                   + Bytes.toStringBinary(region));
-            }
+              }
             wap.w.append(logEntry);
             editsCount++;
-          }
+            }
           LOG.debug(this.getName() + " Applied " + editsCount
               + " total edits to " + Bytes.toStringBinary(region) + " in "
               + (System.currentTimeMillis() - threadTime) + "ms");
@@ -480,27 +516,38 @@ public class HLogSplitter {
           e = RemoteExceptionHandler.checkIOException(e);
           LOG.fatal(this.getName() + " Got while writing log entry to log", e);
           throw e;
-        }
+          }
         return null;
-      }
+        }
     };
   }
 
-  private static Path getRegionLogPath(Entry logEntry, Path rootDir) {
-    Path tableDir = HTableDescriptor.getTableDir(rootDir, logEntry.getKey()
-        .getTablename());
-    Path regionDir = HRegion.getRegionDir(tableDir, HRegionInfo
-        .encodeRegionName(logEntry.getKey().getRegionName()));
-    return new Path(regionDir, RECOVERED_EDITS);
-  }
-
+  /**
+   * Create a new {@link Writer} for writing log splits.
+   * 
+   * @param fs
+   * @param logfile
+   * @param conf
+   * @return A new Writer instance
+   * @throws IOException
+   */
   protected Writer createWriter(FileSystem fs, Path logfile, Configuration conf)
       throws IOException {
     return HLog.createWriter(fs, logfile, conf);
   }
 
+  /**
+   * Create a new {@link Reader} for reading logs to split.
+   * 
+   * @param fs
+   * @param curLogFile
+   * @param conf
+   * @return A new Reader instance
+   * @throws IOException
+   */
   protected Reader getReader(FileSystem fs, Path curLogFile, Configuration conf)
       throws IOException {
     return HLog.getReader(fs, curLogFile, conf);
   }
+
 }

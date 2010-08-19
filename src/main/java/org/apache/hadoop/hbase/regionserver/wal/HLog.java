@@ -292,9 +292,9 @@ public class HLog implements Syncable {
    * @param conf configuration to use
    * @param listener listerner used to request log rolls
    * @param actionListener optional listener for hlog actions like archiving
-   * @param prefix should always be hostname and port in distributed env and
-   *        it will be URL encoded before being used.
-   *        If prefix is null, "hlog" will be used
+   * @param prefix should always be hostname and port in distributed env and it
+   *        will be URL encoded before being used. If prefix is null, "hlog"
+   *        will be used
    * @throws IOException
    */
   public HLog(final FileSystem fs, final Path dir, final Path oldLogDir,
@@ -463,7 +463,7 @@ public class HLog implements Syncable {
         Path oldFile = cleanupCurrentWriter(this.filenum);
         this.filenum = System.currentTimeMillis();
         Path newPath = computeFilename();
-        this.writer = createAWriter(fs, newPath, HBaseConfiguration
+        this.writer = createWriterInstance(fs, newPath, HBaseConfiguration
             .create(conf));
         this.initialReplication = fs.getFileStatus(newPath).getReplication();
 
@@ -511,7 +511,17 @@ public class HLog implements Syncable {
     return regionsToFlush;
   }
 
-  protected Writer createAWriter(final FileSystem fs, final Path path,
+  /**
+   * This method allows subclasses to inject different writers without having to
+   * extend other methods like rollWriter().
+   * 
+   * @param fs
+   * @param path
+   * @param conf
+   * @return
+   * @throws IOException
+   */
+  protected Writer createWriterInstance(final FileSystem fs, final Path path,
       final Configuration conf) throws IOException {
     return createWriter(fs, path, conf);
   }
@@ -528,7 +538,13 @@ public class HLog implements Syncable {
     final Path path, Configuration conf)
   throws IOException {
     try {
-       HLog.Reader reader = new SequenceFileLogReader(HLogKey.class);
+      if (logReaderClass == null) {
+        logReaderClass = conf.getClass("hbase.regionserver.hlog.reader.impl",
+            SequenceFileLogReader.class, Reader.class);
+      }
+
+      HLog.Reader reader = logReaderClass.newInstance();
+
       reader.init(fs, path, conf);
       return reader;
     } catch (IOException e) {
@@ -550,7 +566,12 @@ public class HLog implements Syncable {
       final Path path, Configuration conf)
   throws IOException {
     try {
-      HLog.Writer writer = new SequenceFileLogWriter(HLogKey.class);
+      if (logWriterClass == null) {
+        logWriterClass = conf.getClass("hbase.regionserver.hlog.writer.impl",
+            SequenceFileLogWriter.class, Writer.class);
+      }
+      HLog.Writer writer = (HLog.Writer) logWriterClass.newInstance();
+      
       writer.init(fs, path, conf);
       return writer;
     } catch (Exception e) {
@@ -1189,7 +1210,6 @@ public class HLog implements Syncable {
     }
   }
 
-
   /**
    * Utility class that lets us keep track of the edit with it's key
    * Only used when splitting logs
@@ -1302,37 +1322,6 @@ public class HLog implements Syncable {
     return new Path(oldLogDir, p.getName());
   }
 
-  /*
-   * Path to a file under RECOVERED_EDITS_DIR directory of the region found in
-   * <code>logEntry</code> named for the sequenceid in the passed
-   * <code>logEntry</code>: e.g. /hbase/some_table/2323432434/recovered.edits/2332.
-   * This method also ensures existence of RECOVERED_EDITS_DIR under the region
-   * creating it if necessary.
-   * @param fs
-   * @param logEntry
-   * @param rootDir HBase root dir.
-   * @return Path to file into which to dump split log edits.
-   * @throws IOException
-   */
-  private static Path getRegionSplitEditsPath(final FileSystem fs,
-      final Entry logEntry, final Path rootDir)
-  throws IOException {
-    Path tableDir = HTableDescriptor.getTableDir(rootDir,
-      logEntry.getKey().getTablename());
-    Path regiondir = HRegion.getRegionDir(tableDir,
-      HRegionInfo.encodeRegionName(logEntry.getKey().getRegionName()));
-    Path dir = getRegionDirRecoveredEditsDir(regiondir);
-    if (!fs.exists(dir)) {
-      if (!fs.mkdirs(dir)) LOG.warn("mkdir failed on " + dir);
-    }
-    return new Path(dir,
-      formatRecoveredEditsFileName(logEntry.getKey().getLogSeqNum()));
-   }
-
-  static String formatRecoveredEditsFileName(final long seqid) {
-    return String.format("%019d", seqid);
-  }
-
   /**
    * Returns sorted set of edit files made by wal-log splitter.
    * @param fs
@@ -1341,10 +1330,9 @@ public class HLog implements Syncable {
    * @throws IOException
    */
   public static NavigableSet<Path> getSplitEditFilesSorted(final FileSystem fs,
-      final Path regiondir)
-  throws IOException {
+      final Path regiondir) throws IOException {
     Path editsdir = getRegionDirRecoveredEditsDir(regiondir);
-    FileStatus [] files = fs.listStatus(editsdir, new PathFilter () {
+    FileStatus[] files = fs.listStatus(editsdir, new PathFilter() {
       @Override
       public boolean accept(Path p) {
         boolean result = false;

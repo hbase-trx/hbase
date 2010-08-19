@@ -50,13 +50,30 @@ public class SequenceFileLogWriter implements HLog.Writer {
 
   private Class<? extends HLogKey> keyClass;
 
+  /**
+   * Default constructor.
+   */
+  public SequenceFileLogWriter() {
+    super();
+  }
+
+  /**
+   * This constructor allows a specific HLogKey implementation to override that
+   * which would otherwise be chosen via configuration property.
+   * 
+   * @param keyClass
+   */
   public SequenceFileLogWriter(Class<? extends HLogKey> keyClass) {
     this.keyClass = keyClass;
   }
-
+  
   @Override
   public void init(FileSystem fs, Path path, Configuration conf)
       throws IOException {
+
+    if (null == keyClass) {
+      keyClass = HLog.getKeyClass(conf);
+    }
 
     // Create a SF.Writer instance.
     this.writer = SequenceFile.createWriter(fs, conf, path, keyClass,
@@ -65,7 +82,7 @@ public class SequenceFileLogWriter implements HLog.Writer {
             .getDefaultReplication()), conf.getLong(
             "hbase.regionserver.hlog.blocksize", fs.getDefaultBlockSize()),
         SequenceFile.CompressionType.NONE, new DefaultCodec(), null,
-        new Metadata());
+ new Metadata());
 
     // Get at the private FSDataOutputStream inside in SequenceFile so we can
     // call sync on it.  Make it accessible.  Stash it aside for call up in

@@ -441,8 +441,6 @@ public class TestHLogSplit {
 
   }
 
-
-
   @Test(expected = IOException.class)
   public void testSplitWillFailIfWritingToRegionFails() throws Exception {
     //leave 5th log open so we could append the "trap"
@@ -752,8 +750,8 @@ public class TestHLogSplit {
       if (!logsAreEqual(rd1fs[0].getPath(), rd2fs[0].getPath())) {
         return -1;
       }
-    }
-    return 0;
+	}
+      return 0;
   }
 
   private boolean logsAreEqual(Path p1, Path p2) throws IOException {
